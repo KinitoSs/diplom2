@@ -131,7 +131,7 @@ services:
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://mlops:mlops@postgres/mlops
     ports:
       - "8085:8080"
-    command: webserver
+    command: api-server
 
   airflow-scheduler:
     image: apache/airflow:latest

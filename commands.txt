@@ -1,0 +1,2 @@
+запуск скрипта в спарк:
+/opt/spark/bin/spark-submit --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.536 --master spark://spark-master:7077 /opt/etl/etl_clean.py

@@ -1,0 +1,246 @@
+---
+title: Потоки данных в БЭКах (v2.0 - Big Data Production Ready)
+---
+graph TB
+    %% Стили
+    classDef vessel fill:#E8F5E8,stroke:#2E7D32,color:#1B5E20
+    classDef database fill:#FFF9C4,stroke:#FBC02D,color:#F57F17
+    classDef component fill:#E1F5FE,stroke:#0288D1,color:#01579B
+    classDef package fill:#F5F5F5,stroke:#666,color:#333,stroke-dasharray: 5 5
+
+    %% ========== ИСТОЧНИКИ ДАННЫХ ==========
+    subgraph БЭК [БЭК]
+        direction TB
+        V1["БЭК 1<br/>(буфер, фильтр, PII-маскировка)"]:::vessel
+        V2["БЭК 2<br/>(буфер, фильтр, PII-маскировка)"]:::vessel
+        VN["БЭК N<br/>(буфер, фильтр, PII-маскировка)"]:::vessel
+    end
+
+    %% ========== KAFKA ==========
+    subgraph KAFKA [Kafka Cluster]
+        KAFKA_PROPS["100 партиций<br/> exactly-once"]:::component
+    end
+
+    %% БЭКи отправляют данные напрямую в Kafka
+    V1 -->|"пакетная загрузка<br/>(в порту / по спутнику)"| KAFKA
+    V2 --> KAFKA
+    VN --> KAFKA
+
+    %% ========== СЛОЙ ХРАНЕНИЯ ==========
+    subgraph RAW_LAKE [Сырое озеро данных]
+        direction TB
+        HOT["Hot Path (SSD, 7 дней)"]:::database
+        COLD["Cold Path (HDD, 1 год)"]:::database
+        ARCHIVE["Archive (S3/Glacier, 10 лет)"]:::database
+        HUDI["Таблицы Hudi<br/>(индексы, коммиты, метаданные)"]:::database
+        RAW_VIDEO["Сырые видеопотоки"]:::database
+        RAW_TELEMETRY["Телеметрия/IMU"]:::database
+        RAW_META["Метаданные судна"]:::database
+    end
+
+    %% Kafka пишет в озеро данных (асинхронно)
+    KAFKA -->|"персистентное хранение"| RAW_LAKE
+
+    %% ========== СЛОЙ ЗАГРУЗКИ ==========
+    subgraph LOAD [Слой загрузки]
+        INGEST["Загрузка данных<br/>(Spark Structured Streaming)"]:::component
+        VALIDATE["Валидация схемы<br/>и контроль качества"]:::component
+        
+        subgraph DEDUP [Многоуровневая дедупликация]
+            EXACT["Точное совпадение<br/>(blake2b hash)"]:::component
+            PERCEPTUAL["Перцептивное совпадение<br/>(phash)"]:::component
+            SEMANTIC["Семантическая дедупликация<br/>(embeddings)<br/>(под вопросом, можно сделать умную)"]:::component
+        end
+    end
+
+    %% Kafka также отдает данные в реальную обработку
+    KAFKA -->|"consume at own pace"| INGEST
+    INGEST --> VALIDATE
+
+    %% ========== SCHEMA REGISTRY ==========
+    SCHEMA_REG["Schema Registry<br/>(Avro/Protobuf)"]:::database
+
+    %% Schema Registry проверяет данные в Kafka
+    KAFKA -.->|"валидация схемы"| SCHEMA_REG
+    VALIDATE -->|"получение схемы"| SCHEMA_REG
+    SCHEMA_REG -->|"правила эволюции"| VALIDATE
+
+    VALIDATE --> DEDUP
+
+    STAGING["Промежуточное хранилище<br/>(Parquet/Delta Lake)"]:::database
+
+    DEDUP -->|"очищенные сырые данные"| STAGING
+
+    %% ========== DATA GOVERNANCE ==========
+    subgraph GOVERNANCE [Слой управления данными]
+        PII["PII детектор<br/>(лица, номера судов)"]:::component
+        ANON["Анонимизатор"]:::component
+        RETENTION["Менеджер политик хранения"]:::component
+        COMP_AUDIT["Compliance Audit Log"]:::component
+    end
+
+    STAGING --> PII
+    PII --> ANON
+    ANON -->|"обезличенные данные"| STAGING
+    RETENTION -->|"применение lifecycle"| ARCHIVE
+
+    %% ========== ETL СЛОЙ ==========
+    subgraph ETL [Слой ETL]
+        CLEAN["Очистка данных<br/>(null, выбросы, битые кадры)"]:::component
+        PREPROC["Предобработка<br/>(изменение размера, нормализация, аугментация)"]:::component
+        OOD["Детектор аномалий<br/>(обнаружение OOD)"]:::component
+        SCENE["Анализ сцены<br/>(горизонт, линия воды)"]:::component
+    end
+
+    STAGING -->|"spark/пакетные задачи"| CLEAN
+    CLEAN --> PREPROC
+    PREPROC --> OOD
+    OOD --> SCENE
+
+    %% ========== FEATURE STORE ==========
+    subgraph FEATURE_STORE [Хранилище обработанных данных]
+        FEAT_REG["Feature Registry<br/>(версионирование)"]:::database
+        TRAIN_VIEW["Training View"]:::database
+        INF_VIEW["Inference View"]:::database
+    end
+
+    SCENE -->|"признаки и маски"| FEATURE_STORE
+
+    %% ========== DATA QUALITY ==========
+    subgraph DQ [Слой качества данных]
+        PROFILING["Профилирование данных<br/>(статистики, гистограммы)"]:::component
+        DRIFT_DETECT["Детектор дрейфа<br/>(распределения признаков)"]:::component
+        DQ_METRICS["DQ Метрики"]:::component
+        DQ_DASH["DQ Дашборд"]:::component
+    end
+
+    STAGING -->|"выборка 1%"| PROFILING
+    FEATURE_STORE --> PROFILING
+    PROFILING --> DRIFT_DETECT
+    PROFILING --> DQ_METRICS
+    DQ_METRICS --> DQ_DASH
+
+    %% ========== АВТОРАЗМЕТКА ==========
+    subgraph AUTO [Слой авторазметки]
+        HEAVY["Инференс тяжелой модели<br/>(ансамбль моделей)"]:::component
+        TEMPORAL["Временное сглаживание<br/>(3D/оптический поток)"]:::component
+        CONFIDENCE["Оценка уверенности<br/>(расчет неопределенности)"]:::component
+        HARD["Поиск сложных примеров"]:::component
+    end
+
+    FEATURE_STORE -->|"батчи для инференса"| HEAVY
+    HEAVY --> TEMPORAL
+    TEMPORAL --> CONFIDENCE
+    CONFIDENCE --> HARD
+
+    LABELED["Размеченный датасет<br/>(с оценками уверенности)"]:::database
+
+    HARD --> LABELED
+
+    %% ========== HITL ==========
+    subgraph HITL [Слой HITL]
+        LOW_CONF["Очередь низкой уверенности"]:::component
+        URGENCY["Классификатор срочности"]:::component
+        CRITICAL["Критическая очередь<br/>(SLA 1 час)"]:::component
+        HIGH["Высокий приоритет<br/>(SLA 24 часа)"]:::component
+        NORMAL["Обычный приоритет<br/>(SLA 7 дней)"]:::component
+        HITL_UI["Интерфейс ручной разметки"]:::component
+        FEEDBACK["Контур обратной связи<br/>по исправлениям"]:::component
+        AUDIT_TRAIL["Журнал аудита"]:::component
+    end
+
+    LABELED -->|"уверенность < порога"| LOW_CONF
+    LOW_CONF --> URGENCY
+    URGENCY --> CRITICAL
+    URGENCY --> HIGH
+    URGENCY --> NORMAL
+    CRITICAL --> HITL_UI
+    HIGH --> HITL_UI
+    NORMAL --> HITL_UI
+    HITL_UI --> FEEDBACK
+    FEEDBACK -->|"исправленные метки"| LABELED
+    HITL_UI --> AUDIT_TRAIL
+
+    COMP_AUDIT -->|"дублирование аудита"| AUDIT_TRAIL
+
+    %% ========== ОБУЧЕНИЕ ==========
+    subgraph TRAINING [Слой обучения]
+        ORCH["Оркестратор обучения<br/>(MLflow/Kubeflow)"]:::component
+        TRAIN["Обучение легкой модели"]:::component
+        HPT["Настройка гиперпараметров"]:::component
+        REGISTRY["Реестр моделей<br/>(эксперименты, артефакты)"]:::database
+    end
+
+    LABELED -->|"запуск обучения"| ORCH
+    ORCH --> TRAIN
+    TRAIN --> HPT
+    TRAIN --> REGISTRY
+
+    %% ========== ОЦЕНКА ==========
+    subgraph EVAL [Слой оценки]
+        EVAL_OFFLINE["Валидатор модели<br/>(офлайн-метрики)"]:::component
+        SHADOW["Теневое развертывание"]:::component
+        CANARY["Canary группа<br/>(10% БЭКов)"]:::component
+        BEHAVIOR["Валидатор поведения<br/>(рывки курса, торможения)"]:::component
+        ABTEST["Фреймворк A/B тестов"]:::component
+        MONITOR["Монитор производительности<br/>(обнаружение дрейфа)"]:::component
+    end
+
+    REGISTRY -->|"кандидатная модель"| EVAL_OFFLINE
+    EVAL_OFFLINE --> SHADOW
+    SHADOW --> CANARY
+    CANARY --> BEHAVIOR
+    BEHAVIOR --> ABTEST
+    ABTEST --> MONITOR
+
+    PROD_REGISTRY["Реестр продуктивных моделей"]:::database
+
+    MONITOR -->|"продвинуть если лучше"| PROD_REGISTRY
+
+    %% ========== БИЗНЕС-МЕТРИКИ ==========
+    subgraph BUSINESS [Бизнес-метрики]
+        SAFETY["Индекс безопасности<br/>(ложные срабатывания/пропуски)"]:::component
+        FUEL["Экономия топлива"]:::component
+        DOWNTIME["Время простоя<br/>(из-за ошибок модели)"]:::component
+        ROI["ROI модели"]:::component
+    end
+
+    MONITOR --> SAFETY
+    MONITOR --> FUEL
+    MONITOR --> DOWNTIME
+    SAFETY --> ROI
+    FUEL --> ROI
+
+    %% ========== РАСПРОСТРАНЕНИЕ ==========
+    subgraph UPDATE [Слой обновления БЭКа]
+        DISTRIB["Дистрибьютор моделей<br/>(на БЭКи)"]:::component
+        SCHED["Планировщик обновлений<br/>(в порту/через 5G)"]:::component
+    end
+
+    PROD_REGISTRY -->|"новая продуктивная модель"| DISTRIB
+    DISTRIB --> SCHED
+    SCHED -->|"OTA обновление"| V1
+    SCHED --> V2
+    SCHED --> VN
+
+    %% ========== НАБЛЮДАЕМОСТЬ ==========
+    subgraph OBSERVE [Слой наблюдаемости]
+        LINEAGE["Трекер происхождения данных"]:::component
+        DASHBOARD["Сводный дашборд<br/>(ML + DQ + Бизнес)"]:::component
+        ALERT_MON["Система оповещений"]:::component
+    end
+
+    LABELED -->|"отслеживание происхождения"| LINEAGE
+    REGISTRY --> LINEAGE
+    PROD_REGISTRY --> LINEAGE
+    FEATURE_STORE --> LINEAGE
+    DQ_METRICS --> DASHBOARD
+    MONITOR --> DASHBOARD
+    ROI --> DASHBOARD
+    DRIFT_DETECT -->|"при дрейфе > порога"| ALERT_MON
+    MONITOR --> ALERT_MON
+    DQ_METRICS --> ALERT_MON
+
+    %% Связи ALERT
+    ALERT_MON -.->|"оповещения"| HITL_UI
+    ALERT_MON -.->|"оповещения"| DASHBOARD

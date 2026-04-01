@@ -1,2 +1,15 @@
-запуск скрипта в спарк:
-/opt/spark/bin/spark-submit --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.536 --master spark://spark-master:7077 /opt/etl/etl_clean.py
+Создание 100 партиций кафка
+docker exec -it kafka kafka-topics --create --topic images --bootstrap-server kafka:9092 --partitions 100 --replication-factor 1
+
+Проверка:
+docker exec -it kafka kafka-topics --describe --topic images --bootstrap-server kafka:9092
+
+Иммитация поступления данных с БЭКа
+Закидываем фото в папку data и выполняем команду:
+docker exec -it kafka-producer python producer.py
+
+Проверка, выведем сколько картинок в Kafka
+docker exec -it kafka kafka-run-class kafka.tools.GetOffsetShell --broker-list kafka:9092 --topic images --time -1
+
+Подгружаем из Kafka в MinIO
+docker exec -it spark-master spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:4.0.0,org.apache.hadoop:hadoop-aws:3.3.4 /opt/etl/structured_streaming.py

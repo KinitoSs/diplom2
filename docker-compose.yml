@@ -11,7 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres-init:/docker-entrypoint-initdb.d
+      - ./services/postgres-init:/docker-entrypoint-initdb.d
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -32,8 +32,9 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
   schema-registry:
@@ -63,7 +64,7 @@ services:
 
   mlflow:
     container_name: mlflow-server
-    build: ./docker/mlflow/
+    build: ./services/mlflow/
     depends_on:
       - postgres
       - minio
@@ -108,7 +109,7 @@ services:
 
   spark-master:
     container_name: spark-master
-    build: ./docker/spark/
+    build: ./services/spark/
     environment:
       - SPARK_MODE=master
       - SPARK_MASTER_HOST=spark-master
@@ -116,7 +117,7 @@ services:
       - "7077:7077"   # порт для воркеров
       - "8085:8080"   # Web UI мастера на хосте 8085
     volumes:
-      - ./ETL:/opt/etl
+      - ./services/spark/ETL:/opt/etl
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
@@ -140,6 +141,18 @@ services:
       spark://spark-master:7077
     stdin_open: true
     tty: true
+
+  producer:
+    container_name: kafka-producer
+    build: ./services/producer
+    depends_on:
+      - kafka
+    volumes:
+      - ./data:/data/photos
+      - ./services/producer/producer.py:/app/producer.py
+    command: tail -f /dev/null
+    restart: "no"
+
   
 volumes:
   postgres_data:

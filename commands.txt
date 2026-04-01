@@ -11,5 +11,8 @@ docker exec -it kafka-producer python producer.py
 Проверка, выведем сколько картинок в Kafka
 docker exec -it kafka kafka-run-class kafka.tools.GetOffsetShell --broker-list kafka:9092 --topic images --time -1
 
+Создаем bucket в MinIO
+docker exec minio mc alias set local http://localhost:9000 minioadmin minioadmin && docker exec minio mc mb local/raw
+
 Подгружаем из Kafka в MinIO
-docker exec -it spark-master spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:4.0.0,org.apache.hadoop:hadoop-aws:3.3.4 /opt/etl/structured_streaming.py
+docker exec -it spark-master /opt/spark/bin/spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hadoop:hadoop-aws:3.3.4 /opt/etl/structured_streaming.py

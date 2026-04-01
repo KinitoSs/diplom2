@@ -114,8 +114,8 @@ services:
       - SPARK_MODE=master
       - SPARK_MASTER_HOST=spark-master
     ports:
-      - "7077:7077"   # порт для воркеров
-      - "8085:8080"   # Web UI мастера на хосте 8085
+      - "7077:7077"
+      - "8085:8080"
     volumes:
       - ./services/spark/ETL:/opt/etl
     command: >
@@ -125,17 +125,17 @@ services:
       --webui-port 8080
     stdin_open: true
     tty: true
-  
+
   spark-worker:
     container_name: spark-worker
-    image: apache/spark:4.1.1
+    build: ./services/spark/
     depends_on:
       - spark-master
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER=spark://spark-master:7077
     ports:
-      - "8086:8081"   # Web UI воркера на хосте 8086
+      - "8086:8081"
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077

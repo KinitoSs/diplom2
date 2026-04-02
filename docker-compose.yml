@@ -1,4 +1,12 @@
 name: diplom2
+
+x-spark-base: &spark-base
+  build: ./services/spark/
+  volumes:
+    - ./services/spark/app/:/app/
+  stdin_open: true
+  tty: true
+
 services:
   postgres:
     container_name: postgres
@@ -110,27 +118,23 @@ services:
       - "3000:3000"
 
   spark-master:
+    <<: *spark-base
     container_name: spark-master
-    build: ./services/spark/
     environment:
       - SPARK_MODE=master
       - SPARK_MASTER_HOST=spark-master
     ports:
       - "7077:7077"
       - "8085:8080"
-    volumes:
-      - ./services/spark/app/:/app/
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
       --port 7077
       --webui-port 8080
-    stdin_open: true
-    tty: true
 
   spark-worker:
+    <<: *spark-base
     container_name: spark-worker
-    build: ./services/spark/
     depends_on:
       - spark-master
     environment:
@@ -141,22 +145,18 @@ services:
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
-    stdin_open: true
-    tty: true
 
   spark-streaming:
+    <<: *spark-base
     container_name: spark-streaming
-    build: ./services/spark/
     depends_on:
       - spark-master
       - kafka
       - minio
-    volumes:
-      - ./services/spark/app/:/app/
     command: >
       /opt/spark/bin/spark-submit
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.2
       --master spark://spark-master:7077
-      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hadoop:hadoop-aws:3.3.4
       /app/structured_streaming.py
     restart: always
 

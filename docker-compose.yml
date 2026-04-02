@@ -74,6 +74,8 @@ services:
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    volumes:
+      - ./services/mlflow/app/:/app/
     command: >
       bash -c "
       mlflow server
@@ -117,7 +119,7 @@ services:
       - "7077:7077"
       - "8085:8080"
     volumes:
-      - ./services/spark/ETL:/opt/etl
+      - ./services/spark/app/:/app/
     command: >
       /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
       --host spark-master
@@ -142,6 +144,22 @@ services:
     stdin_open: true
     tty: true
 
+  spark-streaming:
+    container_name: spark-streaming
+    build: ./services/spark/
+    depends_on:
+      - spark-master
+      - kafka
+      - minio
+    volumes:
+      - ./services/spark/app/:/app/
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1,org.apache.hadoop:hadoop-aws:3.3.4
+      /app/structured_streaming.py
+    restart: always
+
   producer:
     container_name: kafka-producer
     build: ./services/producer
@@ -149,9 +167,9 @@ services:
       - kafka
     volumes:
       - ./data:/data/photos
-      - ./services/producer/producer.py:/app/producer.py
-    command: tail -f /dev/null
-    restart: "no"
+      - ./services/producer/app/:/app/
+    command: python /app/producer.py
+    restart: always
 
   
 volumes:

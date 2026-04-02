@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, length
+from pyspark.sql.types import StructType, StructField, BinaryType
 
 spark = SparkSession.builder.appName("MinIO-ETL").getOrCreate()
 
@@ -10,14 +10,11 @@ hadoop_conf.set("fs.s3a.secret.key", "minioadmin")
 hadoop_conf.set("fs.s3a.path.style.access", "true")
 hadoop_conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 
-# читаем raw слой как стрим
-df = spark.readStream.format("parquet").load("s3a://raw/images_parquet/")
+schema = StructType([StructField("image", BinaryType(), True)])
 
-# 🔥 ПРИМЕР ФИЛЬТРАЦИИ
-# например: отбрасываем слишком маленькие "картинки"
-filtered = df.filter(length(col("image")) > 1000)
+df = spark.readStream.format("parquet").schema(schema).load("s3a://raw/images_parquet/")
 
-# можно добавить любые ML / OpenCV позже
+filtered = df  # пока без фильтра
 
 query = (
     filtered.writeStream.format("parquet")

@@ -1,7 +1,6 @@
 from pyspark.sql import SparkSession
 
-spark = SparkSession.builder.appName("MinIO-ETL").getOrCreate()
-
+spark = SparkSession.builder.appName("MinIO-ToLocal").getOrCreate()
 spark.sparkContext.setLogLevel("WARN")
 
 # --- MinIO config ---
@@ -12,32 +11,38 @@ hadoop_conf.set("fs.s3a.secret.key", "minioadmin")
 hadoop_conf.set("fs.s3a.path.style.access", "true")
 hadoop_conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 
-# --- schema (лучше явно задать) ---
+# --- schema ---
 from pyspark.sql.types import StructType, StructField, BinaryType
 
 schema = StructType([StructField("image", BinaryType(), True)])
 
 # --- streaming read ---
-df = spark.readStream.schema(schema).format("parquet").load("s3a://raw/images_parquet/")
+df = (
+    spark.readStream.schema(schema)
+    .format("parquet")
+    .load("s3a://staged/images_parquet/")
+)
 
 
-# --- функция обработки батча ---
+# --- обработка батча ---
 def process_batch(batch_df, batch_id):
     print(f"Processing batch {batch_id}")
 
-    count = batch_df.count()
-    half = count // 2
+    rows = batch_df.collect()
 
-    # берём "первые" half записей
-    result = batch_df.limit(half)
+    for i, row in enumerate(rows):
+        image_bytes = row["image"]
 
-    result.write.mode("append").parquet("s3a://staged/images_parquet/")
+        file_path = f"/data/filtered_photos/image_{batch_id}_{i}.jpg"
+
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
 
 
 # --- запуск ---
 query = (
     df.writeStream.foreachBatch(process_batch)
-    .option("checkpointLocation", "s3a://staged/checkpoints/")
+    .option("checkpointLocation", "s3a://staged/to_local_checkpoints/")
     .start()
 )
 

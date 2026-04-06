@@ -157,7 +157,43 @@ services:
       /opt/spark/bin/spark-submit
       --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.2
       --master spark://spark-master:7077
+      --total-executor-cores 2
+      --executor-cores 1
+      --executor-memory 2g
       /app/structured_streaming.py
+    restart: always
+
+  spark-etl:
+    <<: *spark-base
+    container_name: spark-etl
+    depends_on:
+      - spark-master
+      - minio
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --total-executor-cores 1
+      --executor-cores 1
+      --executor-memory 2g
+      /app/ETL/etl.py
+    restart: always
+
+  spark-tolocal:
+    <<: *spark-base
+    container_name: spark-tolocal
+    depends_on:
+      - spark-master
+      - minio
+    command: >
+      /opt/spark/bin/spark-submit
+      --master spark://spark-master:7077
+      --total-executor-cores 1
+      --executor-cores 1
+      --executor-memory 1g
+      /app/ETL/to_local.py
+    volumes:
+      - ./services/spark/app/:/app/
+      - ./filtered_photos:/data/filtered_photos
     restart: always
 
   producer:

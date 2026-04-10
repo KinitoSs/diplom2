@@ -1,2 +1,6 @@
 data/
 filtered_photos/
+services/airflow/logs/
+__pycache__/
+*.py[cod]
+*$py.class

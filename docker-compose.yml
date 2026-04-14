@@ -173,6 +173,12 @@ services:
       --host spark-master
       --port 7077
       --webui-port 8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 100
+      start_period: 30s
 
   spark-worker:
     <<: *spark-base
@@ -193,7 +199,7 @@ services:
     container_name: spark-streaming
     depends_on:
       spark-master:
-        condition: service_started
+        condition: service_healthy
       kafka:
         condition: service_healthy
       minio:
@@ -208,39 +214,6 @@ services:
       /app/structured_streaming.py
     restart: always
 
-  # spark-etl:
-  #   <<: *spark-base
-  #   container_name: spark-etl
-  #   depends_on:
-  #     - spark-master
-  #     - minio
-  #   command: >
-  #     /opt/spark/bin/spark-submit
-  #     --master spark://spark-master:7077
-  #     --total-executor-cores 1
-  #     --executor-cores 1
-  #     --executor-memory 2g
-  #     /app/ETL/etl.py
-  #   restart: "no"
-
-  # spark-tolocal:
-  #   <<: *spark-base
-  #   container_name: spark-tolocal
-  #   depends_on:
-  #     - spark-master
-  #     - minio
-  #   command: >
-  #     /opt/spark/bin/spark-submit
-  #     --master spark://spark-master:7077
-  #     --total-executor-cores 1
-  #     --executor-cores 1
-  #     --executor-memory 1g
-  #     /app/ETL/to_local.py
-  #   volumes:
-  #     - ./services/spark/app/:/app/
-  #     - ./filtered_photos:/data/filtered_photos
-  #   restart: "no"
-
   producer:
     container_name: kafka-producer
     build: ./services/producer
@@ -252,7 +225,10 @@ services:
       - ./services/producer/app/:/app/
     command: python /app/producer.py
     restart: always
-
+  
+  automarkup-init:
+    container_name: automarkup-init
+    build: ./services/automarkup
   
 volumes:
   postgres_data:

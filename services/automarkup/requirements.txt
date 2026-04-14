@@ -1,0 +1,11 @@
+torch
+torchvision
+fastapi
+uvicorn
+pillow
+numpy
+opencv-python-headless
+python-multipart
+mlflow>=2.0.0
+boto3
+minio

@@ -1,6 +1,11 @@
-data/
-filtered_photos/
+data/*
+!data/.gitkeep
+filtered_photos/*
+!filtered_photos/.gitkeep
+automarkup_photos/*
+!automarkup_photos/.gitkeep
 services/airflow/logs/
 __pycache__/
 *.py[cod]
 *$py.class
+services/automarkup/DeepLabV3_MobileNetV3_best.pth

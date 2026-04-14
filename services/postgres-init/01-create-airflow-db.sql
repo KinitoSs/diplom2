@@ -1,3 +1,3 @@
-CREATE DATABASE airflowdb;
 CREATE USER airflow WITH ENCRYPTED PASSWORD 'airflow';
+CREATE DATABASE airflowdb OWNER airflow;
 GRANT ALL PRIVILEGES ON DATABASE airflowdb TO airflow;

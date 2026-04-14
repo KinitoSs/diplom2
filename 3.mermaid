@@ -1,11 +1,9 @@
----
-title: Потоки данных в БЭКах (v2.0 - Big Data Production Ready)
----
 graph TB
     %% Стили
     classDef vessel fill:#E8F5E8,stroke:#2E7D32,color:#1B5E20
     classDef database fill:#FFF9C4,stroke:#FBC02D,color:#F57F17
     classDef component fill:#E1F5FE,stroke:#0288D1,color:#01579B
+    classDef scheduler fill:#FFE0B2,stroke:#E65100,color:#BF360C,stroke-dasharray: 5 5
     classDef package fill:#F5F5F5,stroke:#666,color:#333,stroke-dasharray: 5 5
 
     %% ========== ИСТОЧНИКИ ДАННЫХ ==========
@@ -26,7 +24,14 @@ graph TB
     V2 --> KAFKA
     VN --> KAFKA
 
-    %% ========== СЛОЙ ХРАНЕНИЯ ==========
+    %% ========== ПОТОКОВАЯ ЗАПИСЬ (SPARK STREAMING) ==========
+    subgraph STREAM_WRITE [Потоковая запись в озеро]
+        SPARK_STREAM["Spark Structured Streaming<br/>(Персист сырых данных)"]:::component
+    end
+
+    KAFKA -->|"consume micro-batch"| SPARK_STREAM
+
+    %% ========== СЛОЙ ХРАНЕНИЯ (RAW DATALAKE) ==========
     subgraph RAW_LAKE [Сырое озеро данных]
         direction TB
         HOT["Hot Path (SSD, 7 дней)"]:::database
@@ -38,38 +43,48 @@ graph TB
         RAW_META["Метаданные судна"]:::database
     end
 
-    %% Kafka пишет в озеро данных (асинхронно)
-    KAFKA -->|"персистентное хранение"| RAW_LAKE
+    SPARK_STREAM -->|"запись Avro/Parquet"| RAW_LAKE
 
-    %% ========== СЛОЙ ЗАГРУЗКИ ==========
-    subgraph LOAD [Слой загрузки]
-        INGEST["Загрузка данных<br/>(Spark Structured Streaming)"]:::component
-        VALIDATE["Валидация схемы<br/>и контроль качества"]:::component
-        
-        subgraph DEDUP [Многоуровневая дедупликация]
-            EXACT["Точное совпадение<br/>(blake2b hash)"]:::component
-            PERCEPTUAL["Перцептивное совпадение<br/>(phash)"]:::component
-            SEMANTIC["Семантическая дедупликация<br/>(embeddings)<br/>(под вопросом, можно сделать умную)"]:::component
-        end
+    %% ========== ORCHESTRATION (AIRFLOW) ==========
+    subgraph AIRFLOW [Оркестрация Airflow]
+        AIRFLOW_DAG["Airflow DAG<br/>(Запуск по расписанию)"]:::scheduler
     end
-
-    %% Kafka также отдает данные в реальную обработку
-    KAFKA -->|"consume at own pace"| INGEST
-    INGEST --> VALIDATE
 
     %% ========== SCHEMA REGISTRY ==========
     SCHEMA_REG["Schema Registry<br/>(Avro/Protobuf)"]:::database
-
-    %% Schema Registry проверяет данные в Kafka
     KAFKA -.->|"валидация схемы"| SCHEMA_REG
+
+    %% ========== ПАКЕТНАЯ ОБРАБОТКА (ETL) ==========
+    subgraph ETL [Слой ETL Spark Job]
+        direction TB
+        READ["Чтение инкремента из Raw Datalake"]:::component
+        
+        subgraph PROCESS [Обработка и очистка]
+            VALIDATE["Валидация схемы<br/>и контроль качества"]:::component
+            CLEAN["Очистка данных<br/>(null, выбросы, битые кадры)"]:::component
+            DEDUP["Дедупликация<br/>(blake2b hash)"]:::component
+        end
+        
+        PREPROC["Предобработка<br/>(изменение размера, нормализация)"]:::component
+        OOD["Детектор аномалий<br/>(обнаружение OOD)"]:::component
+        SCENE["Анализ сцены<br/>(горизонт, линия воды)"]:::component
+    end
+
+    %% Связь Озера с ETL через Airflow
+    RAW_LAKE -->|"читает данные"| READ
+    AIRFLOW_DAG -.->|"триггерит"| ETL
+
+    %% Внутренние переходы ETL
+    READ --> PROCESS
     VALIDATE -->|"получение схемы"| SCHEMA_REG
     SCHEMA_REG -->|"правила эволюции"| VALIDATE
-
-    VALIDATE --> DEDUP
+    PROCESS --> PREPROC
+    PREPROC --> OOD
+    OOD --> SCENE
 
     STAGING["Промежуточное хранилище<br/>(Parquet/Delta Lake)"]:::database
 
-    DEDUP -->|"очищенные сырые данные"| STAGING
+    SCENE -->|"сохранение обработанных данных"| STAGING
 
     %% ========== DATA GOVERNANCE ==========
     subgraph GOVERNANCE [Слой управления данными]
@@ -84,19 +99,6 @@ graph TB
     ANON -->|"обезличенные данные"| STAGING
     RETENTION -->|"применение lifecycle"| ARCHIVE
 
-    %% ========== ETL СЛОЙ ==========
-    subgraph ETL [Слой ETL]
-        CLEAN["Очистка данных<br/>(null, выбросы, битые кадры)"]:::component
-        PREPROC["Предобработка<br/>(изменение размера, нормализация, аугментация)"]:::component
-        OOD["Детектор аномалий<br/>(обнаружение OOD)"]:::component
-        SCENE["Анализ сцены<br/>(горизонт, линия воды)"]:::component
-    end
-
-    STAGING -->|"spark/пакетные задачи"| CLEAN
-    CLEAN --> PREPROC
-    PREPROC --> OOD
-    OOD --> SCENE
-
     %% ========== FEATURE STORE ==========
     subgraph FEATURE_STORE [Хранилище обработанных данных]
         FEAT_REG["Feature Registry<br/>(версионирование)"]:::database
@@ -104,7 +106,7 @@ graph TB
         INF_VIEW["Inference View"]:::database
     end
 
-    SCENE -->|"признаки и маски"| FEATURE_STORE
+    STAGING -->|"признаки и маски"| FEATURE_STORE
 
     %% ========== DATA QUALITY ==========
     subgraph DQ [Слой качества данных]

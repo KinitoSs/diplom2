@@ -24,7 +24,7 @@ graph TB
 
     KAFKA -->|"Consume"| SPARK_STREAM
     
-    subgraph Raw_Storage [Сырые данные (MinIO Raw)]
+    subgraph Raw_Storage [Сырые данные MinIO Raw]
         RAW_BUCKET["minio/raw/
 (Avro/Parquet)"]:::storage
     end
@@ -45,7 +45,7 @@ graph TB
     RAW_BUCKET -->|"Чтение инкремента"| ETL_JOB
     AIRFLOW -.->|"Триггер выполнения"| ETL_JOB
 
-    subgraph Staged_Storage [Подготовленные данные (MinIO Staged)]
+    subgraph Staged_Storage [Подготовленные данные MinIO Staged]
         STAGED_BUCKET["minio/staged/
 (Parquet)"]:::storage
     end
@@ -58,7 +58,7 @@ graph TB
 (Инференс модели)"]:::job
     end
 
-    subgraph Auto_Storage [Результаты разметки (MinIO Automarkup)]
+    subgraph Auto_Storage [Результаты разметки MinIO Automarkup]
         AUTO_BUCKET["minio/automarkup/
 (Parquet с метками)"]:::storage
     end

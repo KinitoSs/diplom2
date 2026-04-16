@@ -39,7 +39,7 @@ graph TB
 
     subgraph Batch_Processing [Пакетная обработка]
         ETL_JOB["Spark ETL Job
-(Очистка, дедупликация, препроцессинг)"]:::job
+(Очистка, аугментация, препроцессинг)"]:::job
     end
 
     RAW_BUCKET -->|"Чтение инкремента"| ETL_JOB

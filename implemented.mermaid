@@ -1,0 +1,84 @@
+graph TB
+    %% Стили
+    classDef vessel fill:#E8F5E8,stroke:#2E7D32,color:#1B5E20
+    classDef queue fill:#E1F5FE,stroke:#0288D1,color:#01579B
+    classDef storage fill:#FFF9C4,stroke:#FBC02D,color:#F57F17
+    classDef job fill:#FFE0B2,stroke:#E65100,color:#BF360C
+    classDef dummy fill:#F5F5F5,stroke:#999,color:#666,stroke-dasharray: 5 5
+
+    %% ========== 1. ИСТОЧНИК И ТРАНСПОРТ ==========
+    subgraph Data_Source [Генерация и доставка]
+        PRODUCER["Producer (Python)
+Генератор тестовых данных"]:::vessel
+        KAFKA["Apache Kafka
+(Zookeeper + Broker)"]:::queue
+    end
+
+    PRODUCER -->|"Отправка сообщений"| KAFKA
+
+    %% ========== 2. STREAMING TO RAW ==========
+    subgraph Stream_Layer [Потоковая запись]
+        SPARK_STREAM["Spark Structured Streaming
+(Чтение из Kafka)"]:::job
+    end
+
+    KAFKA -->|"Consume"| SPARK_STREAM
+    
+    subgraph Raw_Storage [Сырые данные (MinIO Raw)]
+        RAW_BUCKET["minio/raw/
+(Avro/Parquet)"]:::storage
+    end
+
+    SPARK_STREAM -->|"Запись бакетами"| RAW_BUCKET
+
+    %% ========== 3. ORCHESTRATION & ETL ==========
+    subgraph Orchestration [Airflow Scheduler]
+        AIRFLOW["Airflow DAG
+(Запуск по расписанию)"]:::job
+    end
+
+    subgraph Batch_Processing [Пакетная обработка]
+        ETL_JOB["Spark ETL Job
+(Очистка, дедупликация, препроцессинг)"]:::job
+    end
+
+    RAW_BUCKET -->|"Чтение инкремента"| ETL_JOB
+    AIRFLOW -.->|"Триггер выполнения"| ETL_JOB
+
+    subgraph Staged_Storage [Подготовленные данные (MinIO Staged)]
+        STAGED_BUCKET["minio/staged/
+(Parquet)"]:::storage
+    end
+
+    ETL_JOB -->|"Сохранение обработанных батчей"| STAGED_BUCKET
+
+    %% ========== 4. AUTOMARKUP ==========
+    subgraph AI_Layer [Авторазметка]
+        AUTO_JOB["Spark Automarkup Job
+(Инференс модели)"]:::job
+    end
+
+    subgraph Auto_Storage [Результаты разметки (MinIO Automarkup)]
+        AUTO_BUCKET["minio/automarkup/
+(Parquet с метками)"]:::storage
+    end
+
+    STAGED_BUCKET -->|"Чтение батча"| AUTO_JOB
+    AIRFLOW -.->|"Триггер после успеха ETL"| AUTO_JOB
+    AUTO_JOB -->|"Сохранение лейблов"| AUTO_BUCKET
+
+    %% Модель локально в контейнере automarkup
+    MODEL_FILE["Модель (.pkl/.pt)
+внутри контейнера automarkup"]:::dummy
+    MODEL_FILE -.->|"Загружается при старте"| AUTO_JOB
+
+    %% ========== 5. ВСПОМОГАТЕЛЬНЫЕ СЕРВИСЫ ==========
+    subgraph Infra [Инфраструктура]
+        POSTGRES["PostgreSQL
+(Только для Airflow)"]:::storage
+        MINIO["MinIO
+(S3-compatible Storage)"]:::storage
+    end
+
+    %% Связи с инфраструктурой
+    AIRFLOW --> POSTGRES

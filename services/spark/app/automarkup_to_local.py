@@ -24,7 +24,7 @@ hadoop_conf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
 hadoop_conf.set("fs.s3a.connection.ssl.enabled", "false")
 
 # --- Пути ---
-AUTOMARKUP_PATH = "s3a://automarkup/"
+AUTOMARKUP_PATH = "s3a://automarkup/images_parquet/"
 LOCAL_PATH = "/data/automarkup_photos/"
 TRACKING_FILE = "/data/automarkup_photos/.downloaded_tracking.parquet"
 CHECKPOINT_FILE = "/data/automarkup_photos/.last_batch.txt"

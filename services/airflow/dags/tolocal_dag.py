@@ -12,14 +12,19 @@ with DAG(
     tolocal = DockerOperator(
         task_id="to_local",
         image="diplom2-spark-master:latest",
-        command="/opt/spark/bin/spark-submit --master spark://spark-master:7077 /app/ETL/to_local.py",
+        command="/opt/spark/bin/spark-submit "
+                "--master spark://spark-master:7077 "
+                "--driver-memory 2g "
+                "--executor-memory 2g "
+                "--executor-cores 2 "
+                "/app/ETL/to_local.py",
         network_mode="diplom2_default",
         auto_remove=True,
         docker_url="unix://var/run/docker.sock",
         container_name="to_local",
         mounts=[
             {
-                "source": "E:/kin_hdd/Study/12/diplom2/filtered_photos",  # Абсолютный путь на хосте
+                "source": "E:/kin_hdd/Study/12/diplom2/filtered_photos",
                 "target": "/data/filtered_photos",
                 "type": "bind"
             }

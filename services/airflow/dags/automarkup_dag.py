@@ -11,7 +11,7 @@ with DAG(
     automarkup = DockerOperator(
         task_id="run_automarkup",
         image="diplom2-automarkup-init:latest",
-        command="python /app/inference.py",  # если скрипт лежит в корне
+        command="python /app/inference.py",
         network_mode="diplom2_default",
         auto_remove=True,
         docker_url="unix://var/run/docker.sock",
@@ -25,5 +25,8 @@ with DAG(
             "MODEL_TYPE": "mobilenet",
             "BATCH_SIZE": "16"
         },
+        # Добавим лимиты памяти для контейнера с моделью
+        mem_limit="4g",  # для ML-модели может понадобиться больше памяти
+        shm_size="2g",   # shared memory для PyTorch/TensorFlow
         mount_tmp_dir=False,
     )

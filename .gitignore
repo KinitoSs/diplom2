@@ -17,3 +17,5 @@ model_train/data/*
 .~lock.*
 ~$*
 .~*.tmp
+.fuse_hidden*
+.fuse_*

@@ -9,3 +9,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 services/automarkup/DeepLabV3_MobileNetV3_best.pth
+model_train/output/*
+!model_train/output/.gitkeep
+model_train/data/*
+!model_train/data/.gitkeep
+*.lock.*
+.~lock.*
+~$*
+.~*.tmp

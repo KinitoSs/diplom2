@@ -1,0 +1,11 @@
+sudo docker build -t model_train . && sudo docker run --gpus all -it --rm   --shm-size=8g   -v $(pwd)/data:/workspace/data   -v $(pwd)/output:/workspace/output   model_train
+
+sudo docker run --gpus all -it --rm \
+  --shm-size=8g \
+  -p 8888:8888 \
+  -v $(pwd)/data:/workspace/data \
+  -v $(pwd)/output:/workspace/output \
+  -v $(pwd)/notebook.ipynb:/workspace/notebook.ipynb \
+  model_train
+
+  
